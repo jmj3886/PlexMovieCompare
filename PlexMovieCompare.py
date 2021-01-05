@@ -87,13 +87,22 @@ def plex_compare(server_listing, local_listing):
         for server_movie in server_movies:
             difference = True
             title = server_movie['title']
-            location = server_movie['location']
+            location = "Move to Plex local at %s" % server_movie['location']
             for local_movie in local_movies:
                 if server_movie['title'] == local_movie['title']:
                     difference = False
                     if server_movie['location'] != local_movie['location']:
                         difference = True
                         location = ("%-"+str(max_location_len)+"s -> %s") % (local_movie['location'], server_movie['location'])
+            if difference:
+                print(("%-"+str(max_title_len)+"s :- %s") % (title, location), file=diff_file)
+        for local_movie in local_movies:
+            difference = True
+            title = local_movie['title']
+            location = "Move to Plex server at %s" % local_movie['location']
+            for server_movie in server_movies:
+                if local_movie['title'] == server_movie['title']:
+                    difference = False
             if difference:
                 print(("%-"+str(max_title_len)+"s :- %s") % (title, location), file=diff_file)
                 
