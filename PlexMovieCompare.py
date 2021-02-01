@@ -4,6 +4,9 @@ to generate a consolidated listing of the movies.
 """
 
 import os
+import requests
+import json
+import xmltodict
 import argparse
 
 class CommandLineParser(object):
@@ -105,14 +108,38 @@ def plex_compare(server_listing, local_listing):
                     difference = False
             if difference:
                 print(("%-"+str(max_title_len)+"s :- %s") % (title, location), file=diff_file)
-                
+
+
+def get_plex_libraries(plex_address, plex_token):
+    libraries = []
+    req = requests.get(url = "http://%s:32400/library/sections?X-Plex-Token=%s" % (plex_address, plex_token)) 
+    library_json = xmltodict.parse(req.text)
+    for folder in library_json["MediaContainer"]["Directory"]:
+        if folder["@type"] == "movie":
+            libraries.append({"Title":folder["@title"], "Key":folder["@key"]})
+    return libraries   
+
+
+def get_plex_library_content(plex_address, plex_token, libraries):
+    for library in libraries:
+        req = requests.get(url = "http://%s:32400/library/sections/%s/all?X-Plex-Token=%s" % (plex_address, library["Key"], plex_token)) 
+        movies_json = xmltodict.parse(req.text)
+        library["Movies"] = []
+        for movie in library_json["MediaContainer"]["Video"]:
+            library["Movies"].append({"Title":movie})
+        with open("Test.txt", "w") as test_file:
+            json.dump(xmltodict.parse(req.text), test_file, indent=4)
+
 
 if __name__ == "__main__":
     args = CommandLineParser().parse_info()
-    
+    libraries = get_plex_libraries()
+    get_plex_library_content(libraries)
+    '''
     if args.compare is not None:
         server_listing, local_listing = args.compare
         plex_compare(server_listing, local_listing)
     else:
         plex_create_listing()
+    '''
             
