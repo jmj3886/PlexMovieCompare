@@ -1,9 +1,10 @@
 """
-This module is used to traverse a directory structure containing movies in order
-to generate a consolidated listing of the movies.
+This module is used to find and compare the libraries in Plex servers.
+The module can be used to generate listing files for comparison, 
+compare listing files, and compare raw Plex library results.
 """
 
-import os
+import sys
 import requests
 import json
 import xmltodict
@@ -32,21 +33,22 @@ class CommandLineParser(object):
             conflict_handler="resolve",
         )
         self._arg_parser.add_argument(
-            "remote_address",
+            "--listing_file",
             nargs=1,
             type=str,
-            metavar="<REMOTE_SERVER_ADDRESS>",
-            help="The IP address of the remote Plex server.",
+            metavar="<REMOTE_MOVIE_LISTING>",
+            help="The movie listing file generated remotely for "
+            "comparison.",
         )
         self._arg_parser.add_argument(
-            "local_address",
+            "--local_address",
             nargs=1,
             type=str,
             metavar="<LOCAL_SERVER_ADDRESS>",
             help="The IP address of the local Plex server.",
         )
         self._arg_parser.add_argument(
-            "api_token",
+            "--api_token",
             nargs=1,
             type=str,
             metavar="<API_TOKEN>",
@@ -56,10 +58,10 @@ class CommandLineParser(object):
             "-c",
             "-C",
             "--compare",
-            nargs=2,
-            metavar=('serverFile', 'localFile'),
-            help="Compares movie listing '<SERVER_FILE>' to '<LOCAL_FILE>' and "
-                 "identifies the differences.",
+            metavar=('<REMOTE_SERVER_LISTING>', '<LOCAL_SERVER_LISTING>'),
+            help="Compares movie listings '<REMOTE_SERVER_LISTING>' to '<LOCAL_SERVER_LISTING>' and "
+                 "identifies the differences. If <LOCAL_SERVER_LISTING> is not given, "
+                 "--local_address and --api_token should be given to create the listing in memory.",
         )
 
     def parse_info(self, args=None):
@@ -150,24 +152,15 @@ def get_plex_library_content(plex_address, plex_token, libraries):
             library["Movies"].append({"Title": movie["@title"]})
 
 
-def generate_movie_listings(remote_address, local_address, plex_token):
-    remote_listing = []
-    remote_libraries = get_plex_libraries(remote_address, plex_token)
-    get_plex_library_content(remote_address, plex_token, remote_libraries)
-
-    local_listing = []
-    local_libraries = get_plex_libraries(local_address, plex_token)
-    get_plex_library_content(local_address, plex_token, local_libraries)
-
-    for library in remote_libraries:
+def generate_movie_listing(local_address, plex_token):
+    listing = []
+    libraries = get_plex_libraries(local_address, plex_token)
+    get_plex_library_content(local_address, plex_token, libraries)
+    
+    for library in libraries:
         for movie in library["Movies"]:
-            remote_listing.append(
-                {"Title": movie["Title"], "Library": library["Title"]}
-            )
-    for library in local_libraries:
-        for movie in library["Movies"]:
-            local_listing.append({"Title": movie["Title"], "Library": library["Title"]})
-    return remote_listing, local_listing
+            listing.append({"Title": movie["Title"], "Library": library["Title"]})
+    return listing
 
 
 if __name__ == "__main__":
@@ -175,11 +168,15 @@ if __name__ == "__main__":
     if args.compare is not None:
         with open(args.compare[0], 'r') as listing_file:
           remote_listing = json.load(listing_file)
-        with open(args.compare[1], 'r') as listing_file:
-          local_listing = json.load(listing_file)
+        if len(args.compare) < 2 or args.compare[1] is None:
+            if (("local_address" in dir(args)) and ("api_token" in dir(args)) and (args.local_address is not None) and (args.api_token is not None))
+                local_listing = generate_movie_listings(args.local_address[0], args.api_token[0])
+            else:
+                sys.exit("Plex Compare Error: Local Listing File Not Specified")
+        else:
+            with open(args.compare[1], 'r') as listing_file:
+              local_listing = json.load(listing_file)
+        plex_compare(remote_listing, local_listing)
     else:
-        remote_listing, local_listing = generate_movie_listings(
-            args.remote_address[0], args.local_address[0], args.api_token[0]
-        )
-
-    plex_compare(remote_listing, local_listing)
+        with open(args.listing[0], 'w') as listing_file:
+            json.dump(generate_movie_listings(args.local_address[0], args.api_token[0]), listing_file, indent=4) 
