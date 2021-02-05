@@ -9,6 +9,23 @@ import requests
 import json
 import xmltodict
 import argparse
+import re as _re
+
+class CustomParser(argparse.ArgumentParser):
+
+    def _match_argument(self, action, arg_strings_pattern):
+        if action.dest == 'compare':
+            # Account for flexible number of arguments. The pattern is copied from the parent class'
+            # _get_nargs_pattern() function. 
+            narg_pattern = '(-*A{1,2})'
+            match = _re.match(narg_pattern , arg_strings_pattern)
+
+            if match:
+                return len(match.group(1))
+            else:
+                raise argparse.ArgumentError(action, "expected {} or {} arguments".format(1, 2))
+        else:
+            return super()._match_argument(action, arg_strings_pattern)
 
 
 class CommandLineParser(object):
@@ -26,7 +43,7 @@ class CommandLineParser(object):
     """
 
     def __init__(self):
-        self._arg_parser = argparse.ArgumentParser(
+        self._arg_parser = CustomParser(
             description="This tool Generates Movie Listings from a Plex "
             "directory and compares them for differences between two "
             "Plex servers.",
@@ -58,7 +75,8 @@ class CommandLineParser(object):
             "-c",
             "-C",
             "--compare",
-            metavar=('<REMOTE_SERVER_LISTING>', '<LOCAL_SERVER_LISTING>'),
+            nargs=2,
+            metavar=('<REMOTE_SERVER_LISTING>', '[<LOCAL_SERVER_LISTING>]'),
             help="Compares movie listings '<REMOTE_SERVER_LISTING>' to '<LOCAL_SERVER_LISTING>' and "
                  "identifies the differences. If <LOCAL_SERVER_LISTING> is not given, "
                  "--local_address and --api_token should be given to create the listing in memory.",
@@ -125,13 +143,10 @@ def plex_compare(remote_listing, local_listing):
 
 def get_plex_libraries(plex_address, plex_token):
     libraries = []
-    print("http://%s/library/sections?X-Plex-Token=%s"
-        % (plex_address, plex_token))
     req = requests.get(
-        url="http://%s/library/sections?X-Plex-Token=%s"
+        url="http://%s:32400/library/sections?X-Plex-Token=%s"
         % (plex_address, plex_token)
     )
-    print(req)
     library_json = xmltodict.parse(req.text)
     json.dumps(library_json, indent=4)
     for folder in library_json["MediaContainer"]["Directory"]:
@@ -143,7 +158,7 @@ def get_plex_libraries(plex_address, plex_token):
 def get_plex_library_content(plex_address, plex_token, libraries):
     for library in libraries:
         req = requests.get(
-            url="http://%s/library/sections/%s/all?X-Plex-Token=%s"
+            url="http://%s:32400/library/sections/%s/all?X-Plex-Token=%s"
             % (plex_address, library["Key"], plex_token)
         )
         movies_json = xmltodict.parse(req.text)
@@ -168,15 +183,15 @@ if __name__ == "__main__":
     if args.compare is not None:
         with open(args.compare[0], 'r') as listing_file:
           remote_listing = json.load(listing_file)
-        if len(args.compare) < 2 or args.compare[1] is None:
-            if (("local_address" in dir(args)) and ("api_token" in dir(args)) and (args.local_address is not None) and (args.api_token is not None))
-                local_listing = generate_movie_listings(args.local_address[0], args.api_token[0])
+        if len(args.compare) < 2:
+            if (("local_address" in dir(args)) and ("api_token" in dir(args)) and (args.local_address is not None) and (args.api_token is not None)):
+                local_listing = generate_movie_listing(args.local_address[0], args.api_token[0])
             else:
                 sys.exit("Plex Compare Error: Local Listing File Not Specified")
         else:
             with open(args.compare[1], 'r') as listing_file:
               local_listing = json.load(listing_file)
         plex_compare(remote_listing, local_listing)
-    else:
-        with open(args.listing[0], 'w') as listing_file:
-            json.dump(generate_movie_listings(args.local_address[0], args.api_token[0]), listing_file, indent=4) 
+    elif (("listing_file" in dir(args)) and ("local_address" in dir(args)) and ("api_token" in dir(args)) and (args.listing_file is not None) and (args.local_address is not None) and (args.api_token is not None)):
+        with open(args.listing_file[0], 'w') as listing_file:
+            json.dump(generate_movie_listing(args.local_address[0], args.api_token[0]), listing_file, indent=4) 
